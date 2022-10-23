@@ -1,0 +1,358 @@
+-- Question:- Calculate the 3-year moving average of medals earned by Russian gold medalists from the year 1980.
+
+WITH Russian_Medals AS (
+  SELECT
+    Year, COUNT(*) AS Medals
+  FROM Summer_Medals
+  WHERE
+    Country = 'RUS'
+    AND Medal = 'Gold'
+    AND Year >= 1980
+  GROUP BY Year)
+
+SELECT
+  Year, Medals,
+  --- Calculating the 3-year moving average of medals earned
+  AVG(medals) OVER
+    (ORDER BY Year
+     ROWS BETWEEN
+     2 PRECEDING AND CURRENT ROW) AS Medals_MA
+FROM Russian_Medals
+ORDER BY Year;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- For each year, fetch the current gold medalist and the gold medalist 3 competitions ahead of the current row
+(For Discus Throw Womens from 2000)
+
+WITH Discus_Medalists AS (
+  SELECT DISTINCT
+    Year,
+    Athlete
+  FROM Summer_Medals
+  WHERE Medal = 'Gold'
+    AND Event = 'Discus Throw'
+    AND Gender = 'Women'
+    AND Year >= 2000)
+
+SELECT
+  year,
+  athlete,
+  LEAD(athlete, 3) OVER (ORDER BY year ASC) AS Future_Champion
+FROM Discus_Medalists
+ORDER BY Year ASC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Return all athletes and the first athlete ordered by alphabetical order.(for men gold medalist)
+
+WITH All_Male_Medalists AS (
+  SELECT DISTINCT
+    Athlete
+  FROM Summer_Medals
+  WHERE Medal = 'Gold'
+    AND Gender = 'Men')
+
+SELECT
+  athlete,
+  FIRST_VALUE(athlete) OVER (
+    ORDER BY Athlete ASC
+  ) AS First_Athlete
+FROM All_Male_Medalists;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Return the year and city and fetch the last city in which the Olympic games were held.
+
+WITH Hosts AS (
+  SELECT DISTINCT Year, City
+    FROM Summer_Medals)
+
+SELECT
+  Year,
+  City,
+  -- Fetching the last city in which the Olympic games were held
+  LAST_VALUE(city) OVER (
+   ORDER BY year ASC
+   RANGE BETWEEN
+     UNBOUNDED PRECEDING AND
+     UNBOUNDED FOLLOWING
+  ) AS Last_City
+FROM Hosts
+ORDER BY Year ASC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Rank each athlete by the number of medals they've earned -- the higher the count, the higher the rank (with identical
+numbers in case of identical values).
+
+WITH Athlete_Medals AS (
+  SELECT
+    Athlete,
+    COUNT(*) AS Medals
+  FROM Summer_Medals
+  GROUP BY Athlete)
+
+SELECT
+  Athlete, Medals,
+  -- Ranking athletes by the medals they've won
+  RANK() OVER (ORDER BY medals DESC) AS Rank_N
+FROM Athlete_Medals
+ORDER BY Medals DESC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Rank each Korean and Japanese athletes by the count of medals they've earned from the year 2000, the higher the count,
+the higher the rank. (without skipping numbers in case of identical values)
+
+
+WITH Athlete_Medals AS (
+  SELECT
+    Country, Athlete, COUNT(*) AS Medals
+  FROM Summer_Medals
+  WHERE
+    Country IN ('JPN', 'KOR')
+    AND Year >= 2000
+  GROUP BY Country, Athlete
+  HAVING COUNT(*) > 1)
+
+SELECT
+  Country,
+  athlete,
+  DENSE_RANK() OVER (PARTITION BY country
+                ORDER BY Medals DESC) AS Rank_N
+FROM Athlete_Medals
+ORDER BY Country ASC, RANK_N ASC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Split the distinct events into exactly 111 groups, ordered by event in alphabetical order.
+
+WITH Events AS (
+  SELECT DISTINCT Event
+  FROM Summer_Medals)
+  
+SELECT
+  --- Spliting up the distinct events into 111 unique groups
+  event,
+  NTILE(111) OVER (ORDER BY event ASC) AS Page
+FROM Events
+ORDER BY Event ASC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Split the athletes into top, middle, and bottom thirds based on their count of medals, and return the average of each third.
+
+WITH Athlete_Medals AS (
+  SELECT Athlete, COUNT(*) AS Medals
+  FROM Summer_Medals
+  GROUP BY Athlete
+  HAVING COUNT(*) > 1),
+  
+  Thirds AS (
+  SELECT
+    Athlete, Medals,
+    NTILE(3) OVER (ORDER BY Medals DESC) AS Third
+  FROM Athlete_Medals)
+  
+SELECT
+  third,
+  AVG(medals) AS Avg_Medals
+FROM Thirds
+GROUP BY Third
+ORDER BY Third ASC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Return the athletes, the number of medals they earned, and the medals running total, ordered by the athletes' names
+in alphabetical order. (For American gold medalists from 2000)
+
+WITH Athlete_Medals AS (
+  SELECT
+    Athlete, COUNT(*) AS Medals
+  FROM Summer_Medals
+  WHERE
+    Country = 'USA' AND Medal = 'Gold'
+    AND Year >= 2000
+  GROUP BY Athlete)
+
+SELECT
+  -- Calculating the running total of athlete medals
+  Athlete,
+  Medals,
+  SUM(Medals) OVER (ORDER BY athlete ASC) AS Max_Medals
+FROM Athlete_Medals
+ORDER BY Athlete ASC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Return the medals and running maximum medals for China, Korea and Japan by year from 2000.
+
+WITH Country_Medals AS (
+  SELECT
+    Year, Country, COUNT(*) AS Medals
+  FROM Summer_Medals
+  WHERE
+    Country IN ('CHN', 'KOR', 'JPN')
+    AND Medal = 'Gold' AND Year >= 2000
+  GROUP BY Year, Country)
+
+SELECT
+  -- Returining the max medals earned so far per country
+  year, country, Medals,
+  MAX(medals) OVER (PARTITION BY country
+                ORDER BY year) AS Max_Medals
+FROM Country_Medals
+ORDER BY Country, Year;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Return the medals and running minimum gold medals earned by France by year from 2000.
+
+WITH France_Medals AS (
+  SELECT
+    Year, COUNT(*) AS Medals
+  FROM Summer_Medals
+  WHERE
+    Country = 'FRA'
+    AND Medal = 'Gold' AND Year >= 2000
+  GROUP BY Year)
+
+SELECT
+  year, medals,
+  MIN(medals) OVER (ORDER BY year) AS Min_Medals
+FROM France_Medals
+ORDER BY Year;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Return the year, medals earned, and the maximum medals earned for Scandinavian gold medalists by year. (comparing 
+only the current year and the next year)
+
+WITH Scandinavian_Medals AS (
+  SELECT
+    Year, COUNT(*) AS Medals
+  FROM Summer_Medals
+  WHERE
+    Country IN ('DEN', 'NOR', 'FIN', 'SWE', 'ISL')
+    AND Medal = 'Gold'
+  GROUP BY Year)
+
+SELECT
+  year, medals,
+  MAX(medals) OVER (ORDER BY year ASC
+             ROWS BETWEEN CURRENT ROW
+             AND 1 FOLLOWING) AS Max_Medals
+FROM Scandinavian_Medals
+ORDER BY Year ASC;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Return the athletes, medals earned, and the maximum medals earned, comparing only the last two and current athletes,
+ordering by athletes' names in alphabetical order (For Chinese gold medalists from the year 2000)
+
+WITH Chinese_Medals AS (
+  SELECT
+    Athlete, COUNT(*) AS Medals
+  FROM Summer_Medals
+  WHERE
+    Country = 'CHN' AND Medal = 'Gold'
+    AND Year >= 2000
+  GROUP BY Athlete)
+
+SELECT
+  athlete,
+  medals,
+  -- Finding the max of the last two and current rows' medals 
+  MAX(medals) OVER (ORDER BY athlete
+            ROWS BETWEEN 2 PRECEDING
+            AND CURRENT ROW) AS Max_Medals
+FROM Chinese_Medals
+ORDER BY Athlete;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+-- Question:- Calculate the 3-year moving sum of medals earned per country.
+
+WITH Country_Medals AS (
+  SELECT
+    Year, Country, COUNT(*) AS Medals
+  FROM Summer_Medals
+  GROUP BY Year, Country)
+
+SELECT
+  Year, Country, Medals,
+  -- Calculating each country's 3-game moving total
+  SUM(medals) OVER
+    (PARTITION BY country
+     ORDER BY Year
+     ROWS BETWEEN
+     2 PRECEDING AND CURRENT ROW) AS Medals_MA
+FROM Country_Medals
+ORDER BY Country, Year;
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+                                                              x-end-x
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
